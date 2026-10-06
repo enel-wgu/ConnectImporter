@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "connect-config"
+version = "0.1.0"
+description = "Amazon Connect configuration exporter and Terraform generator"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "boto3",
+  "click",
+  "pydantic>=2",
+  "PyYAML",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "ruff",
+  "mypy",
+]
+
+[project.scripts]
+connect-config = "connect_config.cli:cli"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
