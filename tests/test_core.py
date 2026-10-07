@@ -81,6 +81,16 @@ def test_missing_queue_references_are_rejected():
     assert any(issue.severity == "ERROR" and issue.resource_type == "queue" for issue in issues)
 
 
+def test_resolve_flow_content_handles_non_dict_actions():
+    from connect_config.models.common import ResourceType
+    from connect_config.references.catalog import ReferenceCatalog
+    from connect_config.references.flow_resolver import resolve_flow_content
+
+    result = resolve_flow_content({"Actions": ["bad-action", {"Parameters": {"QueueId": "queued"}}]}, ReferenceCatalog(), ResourceType.CONTACT_FLOW, "main_inbound", "cf-1")
+    assert result["resolved_json"]["Actions"][0] == "bad-action"
+    assert result["is_valid"] is False
+
+
 def test_logical_name_collision_safe():
     from connect_config.normalization.naming import LogicalNameAllocator
 

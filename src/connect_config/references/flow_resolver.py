@@ -24,8 +24,24 @@ def resolve_flow_content(content: dict[str, Any], catalog: ReferenceCatalog, res
     unresolved_references: list[dict[str, Any]] = []
     unclassified_keys: list[str] = []
 
-    for action_index, action in enumerate(resolved.get("Actions", [])):
-        parameters = action.get("Parameters", {}) if isinstance(action, dict) else {}
+    if not isinstance(resolved, dict):
+        return {
+            "resolved_json": resolved,
+            "template_variables": template_variables,
+            "external_references": external_references,
+            "unresolved_references": unresolved_references,
+            "unclassified_keys": unclassified_keys,
+            "is_valid": False,
+        }
+
+    actions = resolved.get("Actions", [])
+    if not isinstance(actions, list):
+        actions = []
+
+    for action_index, action in enumerate(actions):
+        if not isinstance(action, dict):
+            continue
+        parameters = action.get("Parameters", {})
         if not isinstance(parameters, dict):
             continue
         for key, value in list(parameters.items()):
@@ -40,7 +56,6 @@ def resolve_flow_content(content: dict[str, Any], catalog: ReferenceCatalog, res
                 resolved_name = catalog.resolve(rule.resource_type.value if isinstance(rule.resource_type, ResourceType) else str(rule.resource_type), value)
                 if resolved_name:
                     var_name = _var_name(rule.category, resolved_name)
-                    template_variables[var_name] = ResourceReference(rule.resource_type, resolved_name, value, rule.category)
                     parameters[key] = f"${{{var_name}}}"
                 else:
                     unresolved_references.append({
@@ -62,7 +77,7 @@ def resolve_flow_content(content: dict[str, Any], catalog: ReferenceCatalog, res
                 external_references.append({"key": key, "category": rule.category, "value": str(value), "variable_name": var_name})
                 parameters[key] = f"${{{var_name}}}"
 
-    resolved["Actions"] = resolved.get("Actions", [])
+    resolved["Actions"] = actions
     if "Metadata" in resolved:
         resolved.pop("Metadata", None)
 
