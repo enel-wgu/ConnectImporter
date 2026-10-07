@@ -30,7 +30,6 @@ dist/
 
 # Generated project artifacts
 config/
-terraform/
 *.tfstate
 *.tfstate.*
 .terraform/
