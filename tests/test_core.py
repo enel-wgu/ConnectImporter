@@ -2,8 +2,27 @@ import json
 
 from connect_config.generation.terraform.render import generate_terraform
 from connect_config.extraction.pipeline import run_export
+from connect_config.models.config_bundle import CanonicalConfig, Queue, QuickConnect, RoutingProfile
 from connect_config.validation.validator import validate_config
 from tests.fake_connect_client import FakeConnectClient
+
+
+def test_queue_reference_rendering_uses_real_resource_addresses():
+    cfg = CanonicalConfig(
+        queues=[
+            Queue(logical_name="customer_service", source_id="q-1", name="Customer Service", hours_of_operation_ref="business_hours", quick_connect_refs=["agent_transfer"]),
+        ],
+        routing_profiles=[
+            RoutingProfile(logical_name="default", source_id="rp-1", name="Default", default_outbound_queue_ref="customer_service", queue_configs=[{"channel": "VOICE", "delay": 0, "priority": 1, "queue_ref": "customer_service"}]),
+        ],
+        quick_connects=[
+            QuickConnect(logical_name="agent_transfer", source_id="qq-1", name="Agent Transfer", quick_connect_type="QUEUE", queue_ref="customer_service", contact_flow_ref="main_inbound"),
+        ],
+    )
+    rendered = "\n".join(generate_terraform(cfg).values())
+    assert "aws_connect_queue.customer_service.queue_id" in rendered
+    assert "aws_connect_quick_connect.agent_transfer.quick_connect_id" in rendered
+    assert "aws_connect_queue..queue_id" not in rendered
 
 
 def test_acceptance_pipeline_and_generation():

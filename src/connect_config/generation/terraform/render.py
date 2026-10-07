@@ -9,6 +9,11 @@ from connect_config.generation.terraform.variables import collect_variables
 from connect_config.models.config_bundle import CanonicalConfig
 
 
+def _resource_list(items: list[str]) -> str:
+    refs = [resource_address("quick_connect", item) for item in items if item]
+    return "[" + ", ".join(refs) + "]" if refs else "[]"
+
+
 def _template_args(flow: Any) -> dict[str, str]:
     args: dict[str, str] = {}
     for var_name, reference in flow.template_variables.items():
@@ -35,16 +40,30 @@ def render_queue(item: Any) -> str:
         f'  name = "{item.name}"',
         f'  description = "{item.description or ""}"',
         f'  hours_of_operation_id = {resource_address("hours_of_operation", item.hours_of_operation_ref or "") if item.hours_of_operation_ref else "null"}',
-        f'  quick_connect_ids = {string_list(item.quick_connect_refs)}',
+        f'  quick_connect_ids = {_resource_list(item.quick_connect_refs)}',
     ])
 
 
 def render_routing_profile(item: Any) -> str:
-    return resource(item.logical_name, "aws_connect_routing_profile", [
+    lines = [
         '  instance_id = var.connect_instance_id',
         f'  name = "{item.name}"',
         f'  default_outbound_queue_id = {resource_address("queue", item.default_outbound_queue_ref or "") if item.default_outbound_queue_ref else "null"}',
-    ])
+    ]
+    for queue_config in getattr(item, "queue_configs", []) or []:
+        queue_ref = queue_config.get("queue_ref")
+        if not queue_ref:
+            continue
+        lines.append('  queue_config {')
+        lines.append(f'    channel = {json.dumps(queue_config.get("channel") or "VOICE")}')
+        lines.append(f'    delay = {queue_config.get("delay", 0)}')
+        lines.append(f'    priority = {queue_config.get("priority", 1)}')
+        lines.append('    queue_reference {')
+        lines.append(f'      channel = {json.dumps(queue_config.get("channel") or "VOICE")}')
+        lines.append(f'      queue_id = {resource_address("queue", queue_ref)}')
+        lines.append('    }')
+        lines.append('  }')
+    return resource(item.logical_name, "aws_connect_routing_profile", lines)
 
 
 def render_security_profile(item: Any) -> str:
