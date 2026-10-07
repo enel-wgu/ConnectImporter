@@ -19,6 +19,7 @@ def validate_config(config: CanonicalConfig) -> list[ValidationIssue]:
         "contact_flow_module": config.contact_flow_modules,
         "prompt": config.prompts,
     }
+    queue_names = {queue.logical_name for queue in config.queues if getattr(queue, "logical_name", None)}
     for resource_type, items in resource_groups.items():
         seen: dict[str, str] = {}
         for item in items:
@@ -28,6 +29,18 @@ def validate_config(config: CanonicalConfig) -> list[ValidationIssue]:
                     issues.append(ValidationIssue("ERROR", resource_type, logical_name, getattr(item, "source_id", None), resource_type, "", "Duplicate logical name detected.", "Use a unique logical name."))
                 else:
                     seen[logical_name] = getattr(item, "source_id", None)
+
+    for profile in config.routing_profiles:
+        if profile.default_outbound_queue_ref and profile.default_outbound_queue_ref not in queue_names:
+            issues.append(ValidationIssue("ERROR", "queue", profile.logical_name, profile.source_id, "routing_profile", "default_outbound_queue_ref", "Routing profile references a queue that is not present in the exported config.", "Ensure the queue exists and was exported with the same logical name."))
+        for queue_config in getattr(profile, "queue_configs", []) or []:
+            queue_ref = queue_config.get("queue_ref")
+            if queue_ref and queue_ref not in queue_names:
+                issues.append(ValidationIssue("ERROR", "queue", profile.logical_name, profile.source_id, "routing_profile", "queue_configs", "Routing profile queue config references a queue that is not present in the exported config.", "Resolve the queue reference or export the missing queue."))
+
+    for quick_connect in config.quick_connects:
+        if quick_connect.queue_ref and quick_connect.queue_ref not in queue_names:
+            issues.append(ValidationIssue("ERROR", "queue", quick_connect.logical_name, quick_connect.source_id, "quick_connect", "queue_ref", "Quick connect references a queue that is not present in the exported config.", "Resolve the queue reference or export the missing queue."))
 
     for flow in config.contact_flows:
         for ref in flow.unresolved_references:

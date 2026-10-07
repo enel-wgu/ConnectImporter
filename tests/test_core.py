@@ -52,6 +52,35 @@ def test_acceptance_pipeline_and_generation():
     assert any("main_inbound" in key for key in tf_files)
 
 
+def test_missing_queue_references_are_rejected():
+    cfg = CanonicalConfig(
+        queues=[
+            Queue(logical_name="customer_service", source_id="q-1", name="Customer Service"),
+        ],
+        routing_profiles=[
+            RoutingProfile(
+                logical_name="default",
+                source_id="rp-1",
+                name="Default",
+                default_outbound_queue_ref="missing_queue",
+                queue_configs=[{"channel": "VOICE", "delay": 0, "priority": 1, "queue_ref": "missing_queue"}],
+            )
+        ],
+        quick_connects=[
+            QuickConnect(
+                logical_name="agent_transfer",
+                source_id="qq-1",
+                name="Agent Transfer",
+                quick_connect_type="QUEUE",
+                queue_ref="missing_queue",
+                contact_flow_ref="main_inbound",
+            )
+        ],
+    )
+    issues = validate_config(cfg)
+    assert any(issue.severity == "ERROR" and issue.resource_type == "queue" for issue in issues)
+
+
 def test_logical_name_collision_safe():
     from connect_config.normalization.naming import LogicalNameAllocator
 

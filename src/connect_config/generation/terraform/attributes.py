@@ -17,8 +17,15 @@ TF_RESOURCE: dict[ResourceType, tuple[str, str]] = {
 
 
 def resource_address(resource_type: ResourceType | str, logical_name: str) -> str:
-    key = resource_type if isinstance(resource_type, ResourceType) else ResourceType(resource_type)
+    if not logical_name:
+        return "null"
+    try:
+        key = resource_type if isinstance(resource_type, ResourceType) else ResourceType(resource_type)
+    except ValueError:
+        return "null"
     if key == ResourceType.PROMPT:
         return "data.aws_connect_prompt.prompt_id"
+    if key not in TF_RESOURCE:
+        return "null"
     tf_resource, id_attr = TF_RESOURCE[key]
     return f"{tf_resource}.{logical_name}.{id_attr}"
