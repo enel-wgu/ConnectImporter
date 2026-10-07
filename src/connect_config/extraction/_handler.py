@@ -69,7 +69,14 @@ class QueuesHandler:
         rows = []
         for summary in list_all(ctx.client, "list_queues", "QueueSummaryList", InstanceId=ctx.instance_id):
             queue_id = summary.get("Id") or summary.get("QueueId")
-            detail = ctx.client.describe_queue(InstanceId=ctx.instance_id, QueueId=queue_id)
+            if not queue_id:
+                continue
+            try:
+                detail = ctx.client.describe_queue(InstanceId=ctx.instance_id, QueueId=queue_id)
+            except Exception as exc:  # pragma: no cover - defensive AWS API handling
+                if "Queue not found" in str(exc) or "ResourceNotFoundException" in str(exc):
+                    continue
+                raise
             rows.append(detail.get("Queue", summary))
         return rows
 
@@ -103,7 +110,14 @@ class RoutingProfilesHandler:
         rows = []
         for summary in list_all(ctx.client, "list_routing_profiles", "RoutingProfileSummaryList", InstanceId=ctx.instance_id):
             profile_id = summary.get("Id") or summary.get("RoutingProfileId")
-            detail = ctx.client.describe_routing_profile(InstanceId=ctx.instance_id, RoutingProfileId=profile_id)
+            if not profile_id:
+                continue
+            try:
+                detail = ctx.client.describe_routing_profile(InstanceId=ctx.instance_id, RoutingProfileId=profile_id)
+            except Exception as exc:  # pragma: no cover - defensive AWS API handling
+                if "Routing profile not found" in str(exc) or "ResourceNotFoundException" in str(exc):
+                    continue
+                raise
             route = detail.get("RoutingProfile", summary)
             rows.append(route)
         return rows
