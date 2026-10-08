@@ -118,7 +118,7 @@ class FakeConnectClient:
         }
 
     def list_hours_of_operations(self, InstanceId, **kwargs):
-        return {"HoursList": list(self.hours_of_operation.values())}
+        return {"HoursOfOperationSummaryList": list(self.hours_of_operation.values())}
 
     def describe_hours_of_operation(self, InstanceId, HoursOfOperationId, **kwargs):
         return {"HoursOfOperation": self.hours_of_operation[HoursOfOperationId]}
@@ -175,7 +175,7 @@ class FakeConnectClient:
         return {"PromptSummaryList": [{"Id": pid, "Name": data["Name"]} for pid, data in self.prompts.items()]}
 
     def list_contact_flow_modules(self, InstanceId, **kwargs):
-        return {"ContactFlowModuleSummaryList": [{"Id": cid, "Name": data["Name"]} for cid, data in self.contact_flow_modules.items()]}
+        return {"ContactFlowModulesSummaryList": [{"Id": cid, "Name": data["Name"]} for cid, data in self.contact_flow_modules.items()]}
 
     def describe_contact_flow_module(self, InstanceId, ContactFlowModuleId, **kwargs):
         return {"ContactFlowModule": self.contact_flow_modules[ContactFlowModuleId]}

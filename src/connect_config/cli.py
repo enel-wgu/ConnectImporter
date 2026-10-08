@@ -6,7 +6,7 @@ from pathlib import Path
 import click
 import yaml
 
-from connect_config.aws.client import build_session
+from connect_config.aws.client import DebuggableClient, build_session
 from connect_config.extraction.pipeline import run_export
 from connect_config.generation.artifacts.flows import generate_flow_artifacts
 from connect_config.generation.terraform.render import generate_terraform
@@ -25,9 +25,12 @@ def cli():
 @click.option("--profile", default=None)
 @click.option("--region", default="us-east-1")
 @click.option("--output", required=True, type=click.Path(file_okay=False, path_type=Path))
-def export(instance_id: str, profile: str | None, region: str, output: Path):
+@click.option("--debug-output", default=None, type=click.Path(dir_okay=False, path_type=Path))
+def export(instance_id: str, profile: str | None, region: str, output: Path, debug_output: Path | None):
     session = build_session(profile=profile, region=region)
     client = session.client("connect", region_name=region)
+    if debug_output is not None:
+        client = DebuggableClient(client, debug_output)
     config = run_export(client, instance_id)
     output.mkdir(parents=True, exist_ok=True)
     for flow in config.contact_flows:

@@ -63,7 +63,7 @@ class HoursHandler:
 
     def extract(self, ctx):
         rows = []
-        for summary in list_all(ctx.client, "list_hours_of_operations", "HoursList", InstanceId=ctx.instance_id):
+        for summary in list_all(ctx.client, "list_hours_of_operations", "HoursOfOperationSummaryList", InstanceId=ctx.instance_id):
             hours_id = summary.get("HoursOfOperationId") or summary.get("Id")
             if not hours_id:
                 continue
@@ -381,7 +381,7 @@ class ContactFlowModulesHandler:
 
     def extract(self, ctx):
         rows = []
-        for summary in list_all(ctx.client, "list_contact_flow_modules", "ContactFlowModuleSummaryList", InstanceId=ctx.instance_id):
+        for summary in list_all(ctx.client, "list_contact_flow_modules", "ContactFlowModulesSummaryList", InstanceId=ctx.instance_id):
             flow_module_id = summary.get("Id") or summary.get("ContactFlowModuleId")
             if not flow_module_id:
                 continue

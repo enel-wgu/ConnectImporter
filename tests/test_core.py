@@ -111,3 +111,22 @@ def test_client_pagination_fallback():
 
     client = LocalClient()
     assert list_all(client, "list_items", "Items") == [1, 2, 3]
+
+
+def test_debug_client_records_raw_boto3_responses(tmp_path):
+    from connect_config.aws.client import DebuggableClient
+
+    class LocalClient:
+        def list_items(self, **kwargs):
+            return {"Items": [{"Id": "abc-123"}]}
+
+    dump_path = tmp_path / "boto3-debug.jsonl"
+    client = DebuggableClient(LocalClient(), dump_path)
+
+    result = client.list_items(InstanceId="instance-1")
+
+    assert result == {"Items": [{"Id": "abc-123"}]}
+    payload = json.loads(dump_path.read_text().strip().splitlines()[-1])
+    assert payload["method"] == "list_items"
+    assert payload["kwargs"]["InstanceId"] == "instance-1"
+    assert payload["response"]["Items"][0]["Id"] == "abc-123"
