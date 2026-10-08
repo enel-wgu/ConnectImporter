@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from connect_config.aws.client import list_all
@@ -20,6 +21,26 @@ from connect_config.models.config_bundle import (
 from connect_config.models.users import UserIdentity
 from connect_config.normalization.naming import LogicalNameAllocator
 from connect_config.references.flow_resolver import resolve_flow_content
+
+logger = logging.getLogger(__name__)
+
+
+def _warn_missing_resource(resource_type: str, resource_id: str | None, exc: Exception) -> None:
+    logger.warning("Skipping missing AWS Connect %s %s: %s", resource_type, resource_id or "unknown", exc)
+
+
+def _is_resource_not_found(exc: Exception) -> bool:
+    if exc is None:
+        return False
+    error = getattr(exc, "response", {}).get("Error", {}) if hasattr(exc, "response") else {}
+    code = error.get("Code") if isinstance(error, dict) else None
+    text = str(exc).lower()
+    return (
+        "not found" in text
+        or "does not exist" in text
+        or "resource not found" in text
+        or code in {"ResourceNotFoundException", "NotFoundException", "404"}
+    )
 
 
 class InstanceHandler:
@@ -44,7 +65,15 @@ class HoursHandler:
         rows = []
         for summary in list_all(ctx.client, "list_hours_of_operations", "HoursList", InstanceId=ctx.instance_id):
             hours_id = summary.get("HoursOfOperationId") or summary.get("Id")
-            detail = ctx.client.describe_hours_of_operation(InstanceId=ctx.instance_id, HoursOfOperationId=hours_id)
+            if not hours_id:
+                continue
+            try:
+                detail = ctx.client.describe_hours_of_operation(InstanceId=ctx.instance_id, HoursOfOperationId=hours_id)
+            except Exception as exc:
+                if _is_resource_not_found(exc):
+                    _warn_missing_resource("hours_of_operation", hours_id, exc)
+                    continue
+                raise
             rows.append(detail.get("HoursOfOperation", summary))
         return rows
 
@@ -74,7 +103,8 @@ class QueuesHandler:
             try:
                 detail = ctx.client.describe_queue(InstanceId=ctx.instance_id, QueueId=queue_id)
             except Exception as exc:  # pragma: no cover - defensive AWS API handling
-                if "Queue not found" in str(exc) or "ResourceNotFoundException" in str(exc):
+                if _is_resource_not_found(exc):
+                    _warn_missing_resource("queue", queue_id, exc)
                     continue
                 raise
             rows.append(detail.get("Queue", summary))
@@ -115,7 +145,8 @@ class RoutingProfilesHandler:
             try:
                 detail = ctx.client.describe_routing_profile(InstanceId=ctx.instance_id, RoutingProfileId=profile_id)
             except Exception as exc:  # pragma: no cover - defensive AWS API handling
-                if "Routing profile not found" in str(exc) or "ResourceNotFoundException" in str(exc):
+                if _is_resource_not_found(exc):
+                    _warn_missing_resource("routing_profile", profile_id, exc)
                     continue
                 raise
             route = detail.get("RoutingProfile", summary)
@@ -146,9 +177,23 @@ class SecurityProfilesHandler:
         rows = []
         for summary in list_all(ctx.client, "list_security_profiles", "SecurityProfileSummaryList", InstanceId=ctx.instance_id):
             profile_id = summary.get("Id") or summary.get("SecurityProfileId")
-            detail = ctx.client.describe_security_profile(InstanceId=ctx.instance_id, SecurityProfileId=profile_id)
+            if not profile_id:
+                continue
+            try:
+                detail = ctx.client.describe_security_profile(InstanceId=ctx.instance_id, SecurityProfileId=profile_id)
+            except Exception as exc:
+                if _is_resource_not_found(exc):
+                    _warn_missing_resource("security_profile", profile_id, exc)
+                    continue
+                raise
             row = detail.get("SecurityProfile", summary)
-            perms = list_all(ctx.client, "list_security_profile_permissions", "Permissions", InstanceId=ctx.instance_id, SecurityProfileId=profile_id)
+            try:
+                perms = list_all(ctx.client, "list_security_profile_permissions", "Permissions", InstanceId=ctx.instance_id, SecurityProfileId=profile_id)
+            except Exception as exc:
+                if _is_resource_not_found(exc):
+                    perms = []
+                else:
+                    raise
             row["Permissions"] = perms
             rows.append(row)
         return rows
@@ -169,11 +214,24 @@ class HierarchyHandler:
 
     def extract(self, ctx):
         rows = []
-        structure = ctx.client.describe_user_hierarchy_structure(InstanceId=ctx.instance_id)
+        try:
+            structure = ctx.client.describe_user_hierarchy_structure(InstanceId=ctx.instance_id)
+        except Exception as exc:
+            if not _is_resource_not_found(exc):
+                raise
+            structure = {}
         groups = list_all(ctx.client, "list_user_hierarchy_groups", "HierarchyGroupSummaryList", InstanceId=ctx.instance_id)
         for summary in groups:
             group_id = summary.get("Id") or summary.get("HierarchyGroupId")
-            detail = ctx.client.describe_user_hierarchy_group(InstanceId=ctx.instance_id, HierarchyGroupId=group_id)
+            if not group_id:
+                continue
+            try:
+                detail = ctx.client.describe_user_hierarchy_group(InstanceId=ctx.instance_id, HierarchyGroupId=group_id)
+            except Exception as exc:
+                if _is_resource_not_found(exc):
+                    _warn_missing_resource("hierarchy_group", group_id, exc)
+                    continue
+                raise
             row = detail.get("HierarchyGroup", summary)
             rows.append(row)
         return rows
@@ -196,7 +254,15 @@ class UserHandler:
         rows = []
         for summary in list_all(ctx.client, "list_users", "UserSummaryList", InstanceId=ctx.instance_id):
             user_id = summary.get("Id") or summary.get("UserId")
-            detail = ctx.client.describe_user(InstanceId=ctx.instance_id, UserId=user_id)
+            if not user_id:
+                continue
+            try:
+                detail = ctx.client.describe_user(InstanceId=ctx.instance_id, UserId=user_id)
+            except Exception as exc:
+                if _is_resource_not_found(exc):
+                    _warn_missing_resource("user", user_id, exc)
+                    continue
+                raise
             rows.append(detail.get("User", summary))
         return rows
 
@@ -241,7 +307,15 @@ class QuickConnectsHandler:
         rows = []
         for summary in list_all(ctx.client, "list_quick_connects", "QuickConnectSummaryList", InstanceId=ctx.instance_id):
             quick_connect_id = summary.get("Id") or summary.get("QuickConnectId")
-            detail = ctx.client.describe_quick_connect(InstanceId=ctx.instance_id, QuickConnectId=quick_connect_id)
+            if not quick_connect_id:
+                continue
+            try:
+                detail = ctx.client.describe_quick_connect(InstanceId=ctx.instance_id, QuickConnectId=quick_connect_id)
+            except Exception as exc:
+                if _is_resource_not_found(exc):
+                    _warn_missing_resource("quick_connect", quick_connect_id, exc)
+                    continue
+                raise
             rows.append(detail.get("QuickConnect", summary))
         return rows
 
@@ -309,7 +383,15 @@ class ContactFlowModulesHandler:
         rows = []
         for summary in list_all(ctx.client, "list_contact_flow_modules", "ContactFlowModuleSummaryList", InstanceId=ctx.instance_id):
             flow_module_id = summary.get("Id") or summary.get("ContactFlowModuleId")
-            detail = ctx.client.describe_contact_flow_module(InstanceId=ctx.instance_id, ContactFlowModuleId=flow_module_id)
+            if not flow_module_id:
+                continue
+            try:
+                detail = ctx.client.describe_contact_flow_module(InstanceId=ctx.instance_id, ContactFlowModuleId=flow_module_id)
+            except Exception as exc:
+                if _is_resource_not_found(exc):
+                    _warn_missing_resource("contact_flow_module", flow_module_id, exc)
+                    continue
+                raise
             rows.append(detail.get("ContactFlowModule", summary))
         return rows
 
@@ -337,7 +419,15 @@ class ContactFlowsHandler:
         rows = []
         for summary in list_all(ctx.client, "list_contact_flows", "ContactFlowSummaryList", InstanceId=ctx.instance_id):
             flow_id = summary.get("Id") or summary.get("ContactFlowId")
-            detail = ctx.client.describe_contact_flow(InstanceId=ctx.instance_id, ContactFlowId=flow_id)
+            if not flow_id:
+                continue
+            try:
+                detail = ctx.client.describe_contact_flow(InstanceId=ctx.instance_id, ContactFlowId=flow_id)
+            except Exception as exc:
+                if _is_resource_not_found(exc):
+                    _warn_missing_resource("contact_flow", flow_id, exc)
+                    continue
+                raise
             rows.append(detail.get("ContactFlow", summary))
         return rows
 
